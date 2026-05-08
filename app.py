@@ -1,12 +1,11 @@
 import streamlit as st
-from openai import OpenAI
+from groq import Groq
 import PyPDF2
 import io
 import base64
 
 # ── Setup ──────────────────────────────────────────────────────
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 # ── Helper: Extract text from PDF ──────────────────────────────
 def extract_from_pdf(uploaded_file) -> str:
@@ -42,8 +41,9 @@ def analyze_prescription_text(text: str, language: str) -> str:
     {text}
     """
     response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": prompt}]
+        model="llama3-70b-8192",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1000
     )
     return response.choices[0].message.content.strip()
 
@@ -66,7 +66,7 @@ def analyze_prescription_image(base64_image: str, language: str) -> str:
     "⚕️ Always follow your doctor's instructions."
     """
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="llava-v1.5-7b-4096-preview",
         messages=[
             {
                 "role": "user",
@@ -80,7 +80,8 @@ def analyze_prescription_image(base64_image: str, language: str) -> str:
                     }
                 ]
             }
-        ]
+        ],
+        max_tokens=1000
     )
     return response.choices[0].message.content.strip()
 
