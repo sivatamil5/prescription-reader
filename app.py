@@ -5,68 +5,84 @@ import io
 import base64
 
 # ── Setup ──────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="Prescription Reader",
+    page_icon="🏥",
+    layout="centered"
+)
+
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# ── Helper: Extract text from PDF ──────────────────────────────
+# ── Helper Functions ───────────────────────────────────────────
+
 def extract_from_pdf(uploaded_file) -> str:
-    pdf_reader = PyPDF2.PdfReader(io.BytesIO(uploaded_file.read()))
-    text = ""
-    for page in pdf_reader.pages:
-        text += page.extract_text() or ""
-    return text.strip()
+    """Extract text from PDF"""
+    try:
+        bytes_data = uploaded_file.getvalue()  # Get bytes without moving pointer
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(bytes_data))
+        text = ""
+        for page in pdf_reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
+        return text.strip()
+    except Exception as e:
+        st.error(f"PDF reading error: {str(e)}")
+        return ""
 
-# ── Helper: Convert image to base64 ────────────────────────────
 def image_to_base64(uploaded_file) -> str:
-    image_bytes = uploaded_file.read()
-    return base64.b64encode(image_bytes).decode("utf-8")
+    """Convert image to base64"""
+    try:
+        bytes_data = uploaded_file.getvalue()
+        return base64.b64encode(bytes_data).decode("utf-8")
+    except Exception:
+        return ""
 
-# ── Agent: Analyze prescription text (PDF) ─────────────────────
 def analyze_prescription_text(text: str, language: str) -> str:
+    """Analyze text prescription"""
     prompt = f"""
-    You are a helpful medical assistant.
-    Explain this prescription in simple {language} language.
+You are a helpful medical assistant. Explain this prescription in simple, easy-to-understand {language} language.
 
-    For each medicine explain:
-    1. 💊 Medicine Name
-    2. 🎯 What it is used for
-    3. ⏰ How many times per day
-    4. ⚠️ Side effects
-    5. 🍽️ Food to avoid
-    6. 📝 Special instructions
+For each medicine, explain:
+1. 💊 Medicine Name
+2. 🎯 What it is used for
+3. ⏰ How many times per day & dosage
+4. ⚠️ Common side effects
+5. 🍽️ Food/drink to avoid
+6. 📝 Special instructions
 
-    End with:
-    "⚕️ Always follow your doctor's instructions."
+End with: "⚕️ Always follow your doctor's instructions. This is only for information."
 
-    Prescription:
-    {text}
-    """
+Prescription:
+{text}
+"""
     response = client.chat.completions.create(
         model="llama3-70b-8192",
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=1000
+        max_tokens=1200,
+        temperature=0.5
     )
     return response.choices[0].message.content.strip()
 
-# ── Agent: Analyze prescription image ──────────────────────────
+
 def analyze_prescription_image(base64_image: str, language: str) -> str:
+    """Analyze prescription image using LLaVA"""
     prompt = f"""
-    You are a helpful medical assistant.
-    Read this prescription image carefully.
-    Explain in simple {language} language.
+You are a helpful medical assistant. Carefully read this handwritten/printed prescription image and explain it in simple, easy-to-understand {language} language.
 
-    For each medicine explain:
-    1. 💊 Medicine Name
-    2. 🎯 What it is used for
-    3. ⏰ How many times per day
-    4. ⚠️ Side effects
-    5. 🍽️ Food to avoid
-    6. 📝 Special instructions
+For each medicine, explain:
+1. 💊 Medicine Name
+2. 🎯 What it is used for
+3. ⏰ How many times per day & dosage
+4. ⚠️ Common side effects
+5. 🍽️ Food/drink to avoid
+6. 📝 Special instructions
 
-    End with:
-    "⚕️ Always follow your doctor's instructions."
-    """
+End with: "⚕️ Always follow your doctor's instructions. This is only for information."
+"""
+
     response = client.chat.completions.create(
-        model="meta-llama/llama-4-scout-17b-16e-instruct",  # ✅ FIXED - replaces deprecated llava-v1.5-7b-4096-preview
+        model="llava-v1.5-7b-4096-preview",
         messages=[
             {
                 "role": "user",
@@ -74,38 +90,33 @@ def analyze_prescription_image(base64_image: str, language: str) -> str:
                     {"type": "text", "text": prompt},
                     {
                         "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{base64_image}"
-                        }
+                        "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
                     }
                 ]
             }
         ],
-        max_tokens=1000
+        max_tokens=1200,
+        temperature=0.5
     )
     return response.choices[0].message.content.strip()
 
+
 # ── Streamlit UI ────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Prescription Reader",
-    page_icon="🏥",
-    layout="centered"
-)
 
 st.title("🏥 AI Prescription Reader")
-st.caption("Upload prescription → Get simple explanation in Tamil, English or Hindi")
+st.caption("Upload your prescription → Get simple explanation in your language")
 
-# ── Language Selection ──────────────────────────────────────────
+# Language Selection
 st.markdown("### 🌐 Select Language")
 language = st.radio(
-    "Choose language:",
+    "Choose explanation language:",
     ["English", "Tamil", "Hindi"],
     horizontal=True
 )
 
 st.markdown("---")
 
-# ── Upload Section ──────────────────────────────────────────────
+# Upload Section
 st.markdown("### 📁 Upload Prescription")
 upload_type = st.radio(
     "Choose format:",
@@ -113,56 +124,56 @@ upload_type = st.radio(
     horizontal=True
 )
 
-uploaded_file = None
+uploaded_file = st.file_uploader(
+    "Upload your prescription",
+    type=["jpg", "jpeg", "png", "pdf"] if upload_type == "📷 Photo (JPG/PNG)" else ["pdf"]
+)
 
-if upload_type == "📷 Photo (JPG/PNG)":
-    uploaded_file = st.file_uploader(
-        "Upload photo", type=["jpg", "jpeg", "png"]
-    )
-    if uploaded_file:
-        st.image(uploaded_file, caption="Your Prescription", width=300)
-else:
-    uploaded_file = st.file_uploader(
-        "Upload PDF", type=["pdf"]
-    )
-    if uploaded_file:
-        st.success("✅ PDF uploaded successfully!")
+if uploaded_file:
+    if upload_type == "📷 Photo (JPG/PNG)":
+        st.image(uploaded_file, caption="Uploaded Prescription", use_column_width=True)
+    else:
+        st.success(f"✅ PDF uploaded: {uploaded_file.name}")
 
 st.markdown("---")
 
-# ── Analyze Button ──────────────────────────────────────────────
+# Analyze Button
 if st.button("🔍 Explain My Prescription", type="primary", use_container_width=True):
     if not uploaded_file:
-        st.error("❌ Please upload your prescription first!")
+        st.error("❌ Please upload a prescription first!")
     else:
-        with st.spinner("🤖 Reading your prescription... please wait..."):
+        with st.spinner("🤖 AI is reading your prescription..."):
             try:
                 if upload_type == "📷 Photo (JPG/PNG)":
                     base64_img = image_to_base64(uploaded_file)
+                    if not base64_img:
+                        st.error("Failed to process image")
+                        st.stop()
                     result = analyze_prescription_image(base64_img, language)
                 else:
                     text = extract_from_pdf(uploaded_file)
-                    if not text:
-                        st.error("❌ Cannot read this PDF. Please try uploading a photo instead.")
+                    if not text or len(text) < 20:
+                        st.error("❌ Could not extract text from PDF. Please try uploading as photo instead.")
                         st.stop()
                     result = analyze_prescription_text(text, language)
 
-                st.success("✅ Done!")
+                st.success("✅ Analysis Complete!")
                 st.markdown("---")
-                st.markdown("## 📋 Prescription Explanation")
+                st.markdown("## 📋 Your Prescription Explanation")
                 st.markdown(result)
-                st.markdown("---")
 
+                # Download button
                 st.download_button(
                     label="⬇️ Download Explanation",
                     data=result,
                     file_name="prescription_explanation.txt",
-                    mime="text/plain"
+                    mime="text/plain",
+                    use_container_width=True
                 )
 
             except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
+                st.error(f"❌ Something went wrong: {str(e)}")
 
-# ── Footer ──────────────────────────────────────────────────────
+# Footer
 st.markdown("---")
-st.caption("⚕️ For information only. Always follow your doctor's instructions. Built for Chennai patients ❤️")
+st.caption("⚕️ **For informational purposes only.** Always consult your doctor. Built with ❤️ for patients")
