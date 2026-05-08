@@ -20,7 +20,7 @@ def image_to_base64(uploaded_file) -> str:
     image_bytes = uploaded_file.read()
     return base64.b64encode(image_bytes).decode("utf-8")
 
-# ── Agent: Analyze prescription text ───────────────────────────
+# ── Agent: Analyze prescription text (PDF) ─────────────────────
 def analyze_prescription_text(text: str, language: str) -> str:
     prompt = f"""
     You are a helpful medical assistant.
@@ -66,7 +66,7 @@ def analyze_prescription_image(base64_image: str, language: str) -> str:
     "⚕️ Always follow your doctor's instructions."
     """
     response = client.chat.completions.create(
-        model="llava-v1.5-7b-4096-preview",
+        model="meta-llama/llama-4-scout-17b-16e-instruct",  # ✅ FIXED - replaces deprecated llava-v1.5-7b-4096-preview
         messages=[
             {
                 "role": "user",
@@ -93,9 +93,9 @@ st.set_page_config(
 )
 
 st.title("🏥 AI Prescription Reader")
-st.caption("Upload prescription → Get simple explanation in Tamil or English")
+st.caption("Upload prescription → Get simple explanation in Tamil, English or Hindi")
 
-# Language
+# ── Language Selection ──────────────────────────────────────────
 st.markdown("### 🌐 Select Language")
 language = st.radio(
     "Choose language:",
@@ -105,7 +105,7 @@ language = st.radio(
 
 st.markdown("---")
 
-# Upload
+# ── Upload Section ──────────────────────────────────────────────
 st.markdown("### 📁 Upload Prescription")
 upload_type = st.radio(
     "Choose format:",
@@ -126,16 +126,16 @@ else:
         "Upload PDF", type=["pdf"]
     )
     if uploaded_file:
-        st.success("✅ PDF uploaded!")
+        st.success("✅ PDF uploaded successfully!")
 
 st.markdown("---")
 
-# Analyze
+# ── Analyze Button ──────────────────────────────────────────────
 if st.button("🔍 Explain My Prescription", type="primary", use_container_width=True):
     if not uploaded_file:
         st.error("❌ Please upload your prescription first!")
     else:
-        with st.spinner("🤖 Reading prescription... please wait..."):
+        with st.spinner("🤖 Reading your prescription... please wait..."):
             try:
                 if upload_type == "📷 Photo (JPG/PNG)":
                     base64_img = image_to_base64(uploaded_file)
@@ -143,13 +143,13 @@ if st.button("🔍 Explain My Prescription", type="primary", use_container_width
                 else:
                     text = extract_from_pdf(uploaded_file)
                     if not text:
-                        st.error("❌ Cannot read PDF. Try photo instead.")
+                        st.error("❌ Cannot read this PDF. Please try uploading a photo instead.")
                         st.stop()
                     result = analyze_prescription_text(text, language)
 
                 st.success("✅ Done!")
                 st.markdown("---")
-                st.markdown("## 📋 Explanation")
+                st.markdown("## 📋 Prescription Explanation")
                 st.markdown(result)
                 st.markdown("---")
 
@@ -163,6 +163,6 @@ if st.button("🔍 Explain My Prescription", type="primary", use_container_width
             except Exception as e:
                 st.error(f"❌ Error: {str(e)}")
 
-# Footer
+# ── Footer ──────────────────────────────────────────────────────
 st.markdown("---")
 st.caption("⚕️ For information only. Always follow your doctor's instructions. Built for Chennai patients ❤️")
