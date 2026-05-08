@@ -16,9 +16,8 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 # ── Helper Functions ───────────────────────────────────────────
 
 def extract_from_pdf(uploaded_file) -> str:
-    """Extract text from PDF"""
     try:
-        bytes_data = uploaded_file.getvalue()  # Get bytes without moving pointer
+        bytes_data = uploaded_file.getvalue()
         pdf_reader = PyPDF2.PdfReader(io.BytesIO(bytes_data))
         text = ""
         for page in pdf_reader.pages:
@@ -31,7 +30,6 @@ def extract_from_pdf(uploaded_file) -> str:
         return ""
 
 def image_to_base64(uploaded_file) -> str:
-    """Convert image to base64"""
     try:
         bytes_data = uploaded_file.getvalue()
         return base64.b64encode(bytes_data).decode("utf-8")
@@ -39,7 +37,6 @@ def image_to_base64(uploaded_file) -> str:
         return ""
 
 def analyze_prescription_text(text: str, language: str) -> str:
-    """Analyze text prescription"""
     prompt = f"""
 You are a helpful medical assistant. Explain this prescription in simple, easy-to-understand {language} language.
 
@@ -66,7 +63,6 @@ Prescription:
 
 
 def analyze_prescription_image(base64_image: str, language: str) -> str:
-    """Analyze prescription image using LLaVA"""
     prompt = f"""
 You are a helpful medical assistant. Carefully read this handwritten/printed prescription image and explain it in simple, easy-to-understand {language} language.
 
@@ -80,9 +76,8 @@ For each medicine, explain:
 
 End with: "⚕️ Always follow your doctor's instructions. This is only for information."
 """
-
     response = client.chat.completions.create(
-        model="llava-v1.5-7b-4096-preview",
+        model="meta-llama/llama-4-scout-17b-16e-instruct",
         messages=[
             {
                 "role": "user",
@@ -126,7 +121,7 @@ upload_type = st.radio(
 
 uploaded_file = st.file_uploader(
     "Upload your prescription",
-    type=["jpg", "jpeg", "png", "pdf"] if upload_type == "📷 Photo (JPG/PNG)" else ["pdf"]
+    type=["jpg", "jpeg", "png"] if upload_type == "📷 Photo (JPG/PNG)" else ["pdf"]
 )
 
 if uploaded_file:
@@ -147,7 +142,7 @@ if st.button("🔍 Explain My Prescription", type="primary", use_container_width
                 if upload_type == "📷 Photo (JPG/PNG)":
                     base64_img = image_to_base64(uploaded_file)
                     if not base64_img:
-                        st.error("Failed to process image")
+                        st.error("❌ Failed to process image. Please try again.")
                         st.stop()
                     result = analyze_prescription_image(base64_img, language)
                 else:
@@ -162,7 +157,6 @@ if st.button("🔍 Explain My Prescription", type="primary", use_container_width
                 st.markdown("## 📋 Your Prescription Explanation")
                 st.markdown(result)
 
-                # Download button
                 st.download_button(
                     label="⬇️ Download Explanation",
                     data=result,
